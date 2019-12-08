@@ -1,0 +1,31 @@
+Metadata-Version: 2.0
+Name: python-zillow
+Version: 0.2.0
+Summary: A Python wrapper around the Zillow API
+Home-page: https://github.com/seme0021/python-zillow
+Author: The Python-Zillow Developers
+Author-email: python-zillow@googlegroups.com
+License: Apache License 2.0
+Download-URL: https://github.com/seme0021/python-zillow/tarball/master
+Keywords: zillow,api,real estate,python
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Communications :: Chat
+Classifier: Topic :: Internet
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Requires-Dist: requests
+Requires-Dist: xmltodict
+
+UNKNOWN
+
+
