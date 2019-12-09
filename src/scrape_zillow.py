@@ -30,31 +30,34 @@ class Property(object):
         self.bedrooms = ''
         self.property_info = ''
         self.area = ''
+        self.days_on_zillow = ''
+
+ZILLOW_URL = 'https://www.zillow.com/'
 
 class PropertyHtml(Property):
 
-    def __init__(self, property_html):
+    def __init__(self, html_elements, json_elements):
         super(PropertyHtml, self).__init__()
-        raw_address = property_html.xpath(".//span[@itemprop='address']//span[@itemprop='streetAddress']//text()")
-        raw_city = property_html.xpath(".//span[@itemprop='address']//span[@itemprop='addressLocality']//text()")
-        raw_state = property_html.xpath(".//span[@itemprop='address']//span[@itemprop='addressRegion']//text()")
-        raw_postal_code = property_html.xpath(".//span[@itemprop='address']//span[@itemprop='postalCode']//text()")
-        raw_price = property_html.xpath(".//span[@class='zsg-photo-card-price']//text()")
-        raw_info = property_html.xpath(".//span[@class='zsg-photo-card-info']//text()")
-        raw_broker_name = property_html.xpath(".//span[@class='zsg-photo-card-broker-name']//text()")
-        url = property_html.xpath(".//a[contains(@class,'overlay-link')]/@href")
-        raw_title = property_html.xpath(".//h4//text()")
+        raw_address = html_elements.xpath('.//h3[@class="list-card-addr"]//text()')
+        raw_price = html_elements.xpath('.//div[@class="list-card-price"]//text()')
+        raw_broker_name = html_elements.xpath('.//div[@class="list-card-truncate"]//text()')
+        if html_elements.xpath('.//span[@class="zsg-icon-for-sale"]'):
+            self.is_forsale = True
+        maybe_days_on_zillow = html_elements.xpath('.//div[@class="list-card-top"]//div[@class="list-card-variable-text list-card-img-overlay"]//text()')[0]
+        if 'days on Zillow' in maybe_days_on_zillow:
+            self.days_on_zillow = int(maybe_days_on_zillow.split()[0])
+        address_node = json_elements.get('address') 
 
-        self.address = clean(raw_address)
-        self.city = clean(raw_city)
-        self.state = clean(raw_state)
-        self.postal_code = clean(raw_postal_code)
+        self.city = address_node.get('addressLocality')
+        self.state = address_node.get('addressRegion')
+        self.postal_code = address_node.get('postalCode')
         self.price = clean(raw_price)
-        self.info = clean(raw_info).replace(u"\xb7", ',')
+        self.bedrooms = json_elements.get('numberOfRooms')
+        self.info = '{} bds'.format(self.bedrooms)
+        self.address = clean(raw_address)
         self.broker = clean(raw_broker_name)
-        self.title = clean(raw_title)
-        self.property_url = "https://www.zillow.com" + url[0] if url else None
-        self.is_forsale = property_html.xpath('.//span[@class="zsg-icon-for-sale"]')
+        self.title = json_elements.get('statusText')
+        self.property_url = ZILLOW_URL + json_elements.get('url')
 
 class PropertyJson(Property):
 
@@ -65,6 +68,7 @@ class PropertyJson(Property):
         self.city = self.property_info.get('city')
         self.state = self.property_info.get('state')
         self.postal_code = self.property_info.get('zipcode')
+        self.days_on_zillow = self.property_info.get('daysOnZillow')
         self.price = json_input.get('price')
         self.bedrooms = json_input.get('beds')
         self.bathrooms = json_input.get('baths')
@@ -73,6 +77,32 @@ class PropertyJson(Property):
         self.broker = json_input.get('brokerName')
         self.property_url = json_input.get('detailUrl')
         self.title = json_input.get('statusText')
+        
+
+def maybe_get_xml_results(parser):
+    xml_results = parser.xpath('//article[@class="list-card list-card-short list-card_not-saved"]')
+    string_results = parser.xpath('//li/script[@type="application/ld+json"]//text()')
+    json_results = []
+    for result in string_results:
+        json_result = json.loads(result)
+        if json_result['@type'] == 'SingleFamilyResidence':
+            json_results.append(json_result)
+
+    search_results = zip(xml_results, json_results)
+    properties = []
+    for xml_result, json_result in search_results:
+        properties.append(PropertyHtml(xml_result, json_result))
+    return properties
+
+def maybe_get_json_results(parser):
+    raw_json = parser.xpath('//script[@data-zrr-shared-data-key="mobileSearchPageStore"]//text()')
+    cleaned_data = clean(raw_json).replace('<!--', "").replace("-->", "")
+    json_data = json.loads(cleaned_data)
+    search_results = json_data.get('searchResults').get('listResults', [])
+    properties = []
+    for result in search_results:
+        properties.append(PropertyJson(result))
+    return properties
 
 
 class ZillowSearchHtml(object):
@@ -86,34 +116,34 @@ class ZillowSearchHtml(object):
         else:
             raise ValueError
 
+        parser = html.fromstring(self.raw_html)
         self.description = description
         self.properties_list = []
-        parser = html.fromstring(self.raw_html)
-        search_results = parser.xpath("//div[@id='search-results']//article")
-        use_json = not search_results
-        if use_json:
-            raw_json = parser.xpath('//script[@data-zrr-shared-data-key="mobileSearchPageStore"]//text()')
-            cleaned_data = clean(raw_json).replace('<!--', "").replace("-->", "")
-            json_data = json.loads(cleaned_data)
-            search_results = json_data.get('searchResults').get('listResults', [])
 
-        for result in search_results:
-            pclass = PropertyJson if use_json else PropertyHtml
-            p = pclass(result)
-            if p.is_forsale:
-                self.properties_list.append(p)
+        self.addresses = []
+        # try json first as it generally has more consistent info
+        properties = maybe_get_json_results(parser)
+        # try parsing the xml directly afterwards
+        properties.extend(maybe_get_xml_results(parser))
+        for prop in properties:
+            if prop.address not in self.addresses:
+                print('Found {}'.format(prop.address))
+                self.addresses.append(prop.address)
+                self.properties_list.append(prop)
+        
     
     def get_properties(self):
         return self.properties_list
     
     def write_data_to_csv(self):
-        fieldnames = ['title', 'address', 'city', 'state', 'postal_code', 'price', 'info', 'broker', 'property_url']
+        fieldnames = ['title', 'address', 'days_on_zillow', 'city', 'state', 'postal_code', 'price', 'info', 'broker', 'property_url']
         filename = 'properties-{}.csv'.format(self.description)
         print('Saving to {}'.format(filename))
         with open(filename, 'wb') as csvfile:
             print(fieldnames)
             writer = csv.DictWriter(csvfile, fieldnames=sorted(fieldnames))
             writer.writeheader()
+            print('Saving {} properties'.format(len(self.properties_list)))
             for p in self.properties_list:
                 data = {}
                 for field in fieldnames:
@@ -123,12 +153,11 @@ class ZillowSearchHtml(object):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('filename', help='html file of Zillow search results')
+    parser.add_argument('description', help='description')
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
-    zsearch = ZillowSearchHtml(args.filename, '19145')
+    zsearch = ZillowSearchHtml(args.filename, args.description)
     properties = zsearch.get_properties()
-    for prop in properties:
-        print('Found {}'.format(prop.address))
     zsearch.write_data_to_csv()
