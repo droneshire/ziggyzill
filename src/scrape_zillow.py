@@ -3,11 +3,12 @@
 from lxml import html
 
 import argparse
+import getpass
 import json
 import os
 import random
-import requests
 import time
+from torrequest import TorRequest
 import unicodecsv as csv
 
 from properties import ZillowPropertyHtml, ZillowPropertyJson
@@ -15,12 +16,15 @@ from urls import ZILLOW_URL
 from util import clean, read_files, save_to_file
 from util import get_response, get_headers
 
+TOR_CONF = '/tmp/.tor.conf'
+
 class ZillowHtmlDownloader(object):
     """ Class that downloads zillow zip code searches for scraping """
     
-    def __init__(self, zip_code):
+    def __init__(self, tor, zip_code):
         self.zip_code = zip_code
-    
+        self.tor = tor
+
     def create_starting_url(self):
         # Creating Zillow URL based on the filter.
         url = os.path.join(ZILLOW_URL, 'homes/for_sale/', self.zip_code)
@@ -29,7 +33,7 @@ class ZillowHtmlDownloader(object):
 
     def query_zillow(self):
         url = self.create_starting_url()
-        response = get_response(url, get_headers())
+        response = get_response(self.tor, url, get_headers())
         if not response:
             print("Failed to fetch the page.")
             return None
@@ -44,16 +48,15 @@ class ZillowHtmlDownloader(object):
         next_page_prefix = ZILLOW_URL + next_page_url
 
         # create some randomness in page browsing
-        ordered_pages = [page for page in range(2, 2 + pages_to_query)]
-        pages_shuffled = random.shuffle(ordered_pages)
-
+        pages = [page for page in range(2, 2 + pages_to_query)]
+        random.shuffle(pages)
         print('Found {} results'.format(total_homes_results))
         print('Pulling results from page 1/{}'.format(pages_to_query + 1))
 
         responses = [response.text]
-        for page in pages_shuffled:
+        for page in pages:
             url = os.path.join(next_page_prefix, '{}_p'.format(page))
-            response = get_response(url, get_headers())
+            response = get_response(self.tor, url, get_headers())
             if not response:
                 print("Failed to fetch the next page.")
                 break
@@ -64,7 +67,7 @@ class ZillowHtmlDownloader(object):
                 f.write(response.text.encode('utf8'))
     
             parser = html.fromstring(response.text)
-            time.sleep(random.random() * 20.0)
+            time.sleep(1.0 + random.random() * 10.0)
         return responses
 
     
@@ -133,7 +136,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--filenames', nargs='+', help='html file(s) of Zillow search results')
     parser.add_argument('--zip-code', help='zip code to search')
-    parser.add_argument('--outdir', help='output dir')
+    parser.add_argument('--outdir', help='output dir', required=True)
     parser.add_argument('description', help='description')
     return parser.parse_args()
 
@@ -142,9 +145,20 @@ if __name__ == "__main__":
     results_pages = []
     assert args.zip_code is not None or args.filenames is not None, 'invalid args'
 
+    if os.path.isfile(TOR_CONF):
+        with open(TOR_CONF) as infile:
+            tpwd = infile.read().strip()
+    else:
+        tpwd = getpass.getpass(prompt='Tor password: ', stream=None)
+        with open(TOR_CONF, 'w') as outfile:
+            outfile.write(tpwd)
+    tr = TorRequest(password=tpwd)
+    tr.reset_identity()
+
     if args.zip_code:
-        html_path = 'properties-{}-{}.html'.format(args.description, args.zip_code)
-        zquery = ZillowHtmlDownloader(args.zip_code)
+        html_path = 'properties_{}__{}_{}.html'.format(
+                    time.strftime("%Y%m%d-%H%M%S"), args.description, args.zip_code)
+        zquery = ZillowHtmlDownloader(tr, args.zip_code)
         results_pages.extend(zquery.query_zillow())
         if not results_pages:
             assert args.filenames, 'Must specify a downloaded html file since we cannot query zillow!'

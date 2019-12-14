@@ -1,10 +1,10 @@
 """ Util functions """
 import requests
 
-def get_response(url, headers, response_path=None):
+def get_response(tor, url, headers, response_path=None):
     for i in range(5):
         print('URL: {}'.format(url))
-        response = requests.get(url, headers=headers)
+        response = tor.get(url, headers=headers)
         if response_path:
             save_to_file(response_path, response.text)
         if response.status_code != 200:
@@ -15,12 +15,7 @@ def get_response(url, headers, response_path=None):
     return None
 
 def get_headers():
-    headers = {'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'accept-encoding': 'gzip, deflate, sdch, br',
-            'accept-language': 'en-GB,en;q=0.8,en-US;q=0.6,ml;q=0.4',
-            'cache-control': 'max-age=0',
-            'upgrade-insecure-requests': '1',
-            'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36'}
+    headers = {'user-agent': 'Chrome/78.0.3904.108 Safari/537.36'}
     return headers
 
 def clean(text):
