@@ -115,9 +115,9 @@ class ZillowScraper(object):
                 self.properties_list.append(prop)
         return self.properties_list
     
-    def write_data_to_csv(self):
+    def write_data_to_csv(self, outdir):
         fieldnames = ['title', 'address', 'days_on_zillow', 'city', 'state', 'postal_code', 'price', 'info', 'broker', 'property_url']
-        filename = 'properties-{}.csv'.format(self.description)
+        filename = os.path.join(outdir, 'properties-{}.csv'.format(self.description))
         print('Saving to {}'.format(filename))
         with open(filename, 'wb') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=sorted(fieldnames))
@@ -133,6 +133,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--filenames', nargs='+', help='html file(s) of Zillow search results')
     parser.add_argument('--zip-code', help='zip code to search')
+    parser.add_argument('--outdir', help='output dir')
     parser.add_argument('description', help='description')
     return parser.parse_args()
 
@@ -160,4 +161,4 @@ if __name__ == "__main__":
         except:
             print(result)
             raise
-    zsearch.write_data_to_csv()
+    zsearch.write_data_to_csv(args.outdir)
