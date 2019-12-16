@@ -68,7 +68,7 @@ class ZillowHtmlDownloader(object):
         total_homes_results = int(parser.xpath('//div/div/div[@class="search-subtitle"]/span[@class="result-count"]//text()')[0].split()[0])
         PROPERTIES_PER_PAGE = 40
         # don't add 1 b/c we've already queried the first page
-        pages_to_query = total_homes_results / PROPERTIES_PER_PAGE
+        pages_to_query = int(total_homes_results / PROPERTIES_PER_PAGE)
         next_page = parser.xpath('//li[@class="zsg-pagination-next"]/a/@href')[0]
         next_page_url = os.path.dirname(next_page.rstrip('/'))
         next_page_prefix = ZILLOW_URL + next_page_url
@@ -86,9 +86,6 @@ class ZillowHtmlDownloader(object):
                 print("Failed to fetch the next page.")
                 break
             responses.append(response.text)
-
-            with open('/tmp/foo{}.html'.format(page), 'w') as f:
-                f.write(response.text.encode('utf8'))
     
             parser = html.fromstring(response.text)
             time.sleep(1.0 + random.random() * 10.0)
