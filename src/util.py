@@ -1,9 +1,15 @@
 """ Util functions """
-import requests
+import getpass
+import os
 
-def get_response(tor, url, headers, response_path=None):
+from torrequest import TorRequest
+
+TOR_CONF = '/tmp/.tor.conf'
+
+def get_response(tor, url, headers, response_path=None, verbose=False):
     for i in range(5):
-        print('URL: {}'.format(url))
+        if verbose:
+            print('URL: {}'.format(url))
         response = tor.get(url, headers=headers)
         if response_path:
             save_to_file(response_path, response.text)
@@ -13,6 +19,20 @@ def get_response(tor, url, headers, response_path=None):
             raise Exception('!!!REcaptcha robot blocking us from site!!!'.format(url))
         return response
     return None
+
+def get_tor_client():
+    if os.path.isfile(TOR_CONF):
+        with open(TOR_CONF) as infile:
+            tpwd = infile.read().strip()
+    else:
+        tpwd = getpass.getpass(prompt='Tor password: ', stream=None)
+        with open(TOR_CONF, 'w') as outfile:
+            outfile.write(tpwd)
+    print('Connecting to tor...')
+    tr = TorRequest(password=tpwd)
+    tr.reset_identity()
+    print('Session established!')
+    return tr
 
 def get_headers():
     headers = {'user-agent': 'Chrome/78.0.3904.108 Safari/537.36'}
