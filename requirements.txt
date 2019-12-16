@@ -1,6 +1,7 @@
 certifi==2019.11.28
 chardet==3.0.4
 gspread==3.1.0
+gunicorn==19.4.5
 httplib2==0.14.0
 idna==2.8
 lxml==4.4.2
