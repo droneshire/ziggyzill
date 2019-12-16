@@ -6,3 +6,4 @@ share/*
 venv/*
 .vscode/*
 *.pyc
+.env
