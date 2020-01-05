@@ -114,7 +114,7 @@ class ZillowHtmlDownloader(object):
             responses.append(response.text)
 
             parser = html.fromstring(response.text)
-            time.sleep(1.0 + random.random() * 1.0)
+            time.sleep(1.0 + random.random() * 10.0)
         return responses
 
 
@@ -190,9 +190,9 @@ Here are your Zillow results for {}
 
 Results are provided by Engineered Cash Flow LLC
 Please support us by following us:
-    Facebook: www.facebook.com/engineeredcashflow
-    Instagram: www.instagram.com/engineeredcashflow
-    Website: www.engineeredcashflow.com
+https://www.facebook.com/engineeredcashflow
+https://www.instagram.com/engineeredcashflow
+https://www.engineeredcashflow.com
 
 Disclaimer:
 
@@ -219,14 +219,7 @@ class ZillowScraperGsheets(ZillowScraper):
         self.share_email = share_email
         self.zip_code = zip_code
 
-    def write_data_to_csv(self):
-        sheetname = 'zillow_data_{}_{}'.format(
-            datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), self.description)
-        sheet = self.client.create(sheetname)
-        rows = len(self.properties_list) + 2  # title + fieldnames
-        cols = len(self.fieldnames)
-
-        # disclaimer worksheet
+    def create_disclaimer_worksheet(self, sheet):
         worksheet = sheet.get_worksheet(0)
         worksheet.update_title('Info')
         disclaimer = INFO.format(self.zip_code).splitlines()
@@ -246,7 +239,7 @@ class ZillowScraperGsheets(ZillowScraper):
                                            ('A4:E4', fmt),
                                            ('A9:E9', fmt)])
 
-        # data worksheet
+    def create_data_worksheet(self, sheet, rows, cols):
         worksheet = sheet.add_worksheet(
             title=self.description,
             rows=str(rows),
@@ -254,7 +247,7 @@ class ZillowScraperGsheets(ZillowScraper):
         worksheet.clear()
         cell_list = worksheet.range(1, 1, rows, cols)
         cell_values = [
-            'Provided to you by Engineered Cash Flow LLC, www.engineeredcashflow.com']
+            'Provided to you by Engineered Cash Flow LLC, https://www.engineeredcashflow.com']
         cell_values.extend([''] * (cols - 1))
         cell_values.extend(self.fieldnames)
 
@@ -284,9 +277,20 @@ class ZillowScraperGsheets(ZillowScraper):
             horizontalAlignment='CENTER')
         # hack since gspread_formatting doesn't seem to support
         # full row notation (e.g. '1:2')
-        range_str = 'B2:{}2'.format(chr(ord('a') + cols).upper())
-        gsf.format_cell_ranges(worksheet, [('A1', fmt_title),
-                                           (range_str, fmt_fields)])
+        col_label = chr(ord('a') + cols).upper()
+        gsf.format_cell_ranges(worksheet, [
+            ('A1:{}1'.format(col_label), fmt_title),
+            ('A2:{}2'.format(col_label), fmt_fields)])
+
+    def write_data_to_csv(self):
+        sheetname = 'zillow_data_{}_{}'.format(
+            datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), self.description)
+        sheet = self.client.create(sheetname)
+        rows = len(self.properties_list) + 2  # title + fieldnames
+        cols = len(self.fieldnames)
+
+        self.create_disclaimer_worksheet(sheet)
+        self.create_data_worksheet(sheet, rows, cols)
 
         print('Sharing with {}'.format(self.share_email))
         sheet.share(
