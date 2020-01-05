@@ -12,6 +12,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from tqdm import tqdm
 
 from properties import ZillowPropertyHtml, ZillowPropertyJson
+from util import get_tor_client, read_files
 from urls import ZILLOW_URL
 from util import clean
 from util import get_response, get_headers
@@ -46,9 +47,10 @@ def maybe_get_json_results(parser):
 class ZillowHtmlDownloader(object):
     """ Class that downloads zillow zip code searches for scraping """
     
-    def __init__(self, tor, zip_code):
+    def __init__(self, tor, zip_code, verbose=False):
         self.zip_code = zip_code
         self.tor = tor
+        self.verbose = verbose
 
     def create_starting_url(self):
         # Creating Zillow URL based on the filter.
@@ -58,14 +60,15 @@ class ZillowHtmlDownloader(object):
 
     def query_zillow(self):
         url = self.create_starting_url()
-        response = get_response(self.tor, url, get_headers())
+        response = get_response(self.tor, url, get_headers(), verbose=self.verbose)
         if not response:
             print("Failed to fetch the page.")
             return None
 
         parser = html.fromstring(response.text)
         print('Reading root page results')
-        total_homes_results = int(parser.xpath('//div/div/div[@class="search-subtitle"]/span[@class="result-count"]//text()')[0].split()[0])
+        result_count_str = parser.xpath('//div/div/div[@class="search-subtitle"]/span[@class="result-count"]//text()')[0].split()[0]
+        total_homes_results = int(result_count_str.replace(',',''))
         PROPERTIES_PER_PAGE = 40
         # don't add 1 b/c we've already queried the first page
         pages_to_query = int(total_homes_results / PROPERTIES_PER_PAGE)
@@ -81,10 +84,10 @@ class ZillowHtmlDownloader(object):
         responses = [response.text]
         for page in tqdm(pages):
             url = os.path.join(next_page_prefix, '{}_p'.format(page))
-            response = get_response(self.tor, url, get_headers())
+            response = get_response(self.tor, url, get_headers(), verbose=self.verbose)
             if not response:
                 print("Failed to fetch the next page.")
-                break
+                continue
             responses.append(response.text)
     
             parser = html.fromstring(response.text)
@@ -95,11 +98,13 @@ class ZillowScraper(object):
     """ Class for scraping Zillow search html """    
     GSHEETS_SCOPE = ["https://spreadsheets.google.com/feeds",'https://www.googleapis.com/auth/spreadsheets',"https://www.googleapis.com/auth/drive.file","https://www.googleapis.com/auth/drive"]
 
-    def __init__(self, description):
+    def __init__(self, description, zipcode, verbose=False):
         self.description = description
+        self.zipcode = zipcode
         self.properties_list = []
         self.addresses = []
         self.fieldnames = sorted(['title', 'address', 'days_on_zillow', 'city', 'state', 'postal_code', 'price', 'info', 'broker', 'property_url'])
+        self.verbose = verbose
     
     def parse_properties(self, raw_html):
         parser = html.fromstring(raw_html)
@@ -110,7 +115,8 @@ class ZillowScraper(object):
         for prop in properties:
             if prop.address in self.addresses:
                 continue
-            print('Found {}'.format(prop.address))
+            if self.verbose:
+                print('Found {}'.format(prop.address))
             self.addresses.append(prop.address)
             self.properties_list.append(prop)
         return self.properties_list
@@ -118,6 +124,30 @@ class ZillowScraper(object):
     def write_data_to_csv(self):
         """ Virtual method, implement in base class """
         raise NotImplementedError
+
+    def scrape(self, filenames=None):
+        results_pages = []
+        if filenames:
+            print('Reading:\n{}'.format('\t\n'.join(filenames)))
+            results_pages.extend(read_files(filenames))
+        else:
+            tr = get_tor_client()
+            zquery = ZillowHtmlDownloader(tr, self.zipcode)
+            results_pages.extend(zquery.query_zillow())
+            if not results_pages:
+                assert filenames, 'Must specify a downloaded html file since we cannot query zillow!'
+                results_pages.extend(read_files(filenames))
+
+        for i, result in enumerate(results_pages):
+            try:
+                print('Parsing page {}'.format(i + 1))
+                self.parse_properties(result)
+            except:
+                print(result)
+                raise
+        self.write_data_to_csv()
+
+
 INFO = """\
 Here are your Zillow results for {}
 
@@ -142,9 +172,8 @@ you take in reliance on our statements or recommendations.
 """
 
 class ZillowScraperGsheets(ZillowScraper):
-    
-    def __init__(self, share_email, zip_code):
-        super(ZillowScraperGsheets, self).__init__(zip_code)
+    def __init__(self, zip_code, share_email):
+        super(ZillowScraperGsheets, self).__init__(description=zip_code, zipcode=zip_code)
         creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS, self.GSHEETS_SCOPE)
         self.client = gspread.authorize(creds)
         self.share_email = share_email
@@ -153,27 +182,49 @@ class ZillowScraperGsheets(ZillowScraper):
     def write_data_to_csv(self):
         sheetname = 'zillow_data_{}_{}'.format(datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), self.description)
         sheet = self.client.create(sheetname)
-        rows = len(self.properties_list) + 1
+        rows = len(self.properties_list) + 2 # title + fieldnames
         cols = len(self.fieldnames)
+        
+        # disclaimer worksheet
         worksheet = sheet.get_worksheet(0)
         worksheet.update_title('Info')
-        for line in INFO.format(self.zip_code).splitlines():
-            worksheet.append_row([line])
+        disclaimer = INFO.format(self.zip_code).splitlines()
+        disclaimer_cells = worksheet.range(1, 1, len(disclaimer), 1)
+        for i, line in enumerate(disclaimer):
+            disclaimer_cells[i].value = line
+        worksheet.update_cells(disclaimer_cells)
+
+        # data worksheet
         worksheet = sheet.add_worksheet(title=self.description, rows=str(rows), cols=str(cols))
         worksheet.clear()
-        worksheet.append_row(['Provided to you by Engineered Cash Flow LLC, www.engineeredcashflow.com'])
-        worksheet.append_row(self.fieldnames)
+        cell_list = worksheet.range(1, 1, rows, cols)
+        cell_values = ['Provided to you by Engineered Cash Flow LLC, www.engineeredcashflow.com']
+        cell_values.extend([''] * (cols - 1))
+        cell_values.extend(self.fieldnames)
+
         for p in tqdm(self.properties_list):
             data = []
             for field in self.fieldnames:
                 data.append(p.__dict__[field])
-            worksheet.append_row(data)
-        sheet.share(self.share_email, perm_type='anyone', role='reader')
+            cell_values.extend(data)
+        
+        assert len(cell_values) == len(cell_list), 'Cell/value mismatch'
+
+        for i, val in enumerate(cell_values):
+            cell_list[i].value = val
+        worksheet.update_cells(cell_list)
+        print('Sharing with {}'.format(self.share_email))
+        sheet.share(self.share_email, 
+                    perm_type='user', 
+                    role='reader',
+                    notify=True,
+                    email_message='Here is your zipcode list from Engineered Cash Flow',
+                    with_link=False)
 
 class ZillowScraperCsv(ZillowScraper):
 
     def __init__(self, zip_code, outdir):
-        super(ZillowScraperCsv, self).__init__(zip_code)
+        super(ZillowScraperCsv, self).__init__(description=zip_code, zipcode=zip_code)
         self.outdir = outdir
 
     def write_data_to_csv(self):

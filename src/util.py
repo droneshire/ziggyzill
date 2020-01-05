@@ -1,22 +1,26 @@
 """ Util functions """
 import getpass
 import os
+import re
 
 from torrequest import TorRequest
 
 TOR_CONF = '/tmp/.tor.conf'
 
+EMAIL_REGEX = re.compile('\S+@\S+')
+
 def get_response(tor, url, headers, response_path=None, verbose=False):
     for i in range(5):
+        response = tor.get(url, headers=headers)
         if verbose:
             print('URL: {}'.format(url))
-        response = tor.get(url, headers=headers)
+            print('Response:\n'.format(response.text))
         if response_path:
             save_to_file(response_path, response.text)
-        if response.status_code != 200:
-            continue            
         if 'Please verify you\'re a human to continue.' in response.text:
             raise Exception('!!!REcaptcha robot blocking us from site!!!'.format(url))
+        if response.status_code != 200:
+            continue            
         return response
     return None
 
