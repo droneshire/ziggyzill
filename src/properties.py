@@ -1,5 +1,5 @@
-from urls import ZILLOW_URL
-from util import clean
+from src.urls import ZILLOW_URL
+from src.util import clean
 
 class Property(object):
 

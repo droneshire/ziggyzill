@@ -11,11 +11,11 @@ from lxml import html
 from oauth2client.service_account import ServiceAccountCredentials
 from tqdm import tqdm
 
-from properties import ZillowPropertyHtml, ZillowPropertyJson
-from util import get_tor_client, read_files
-from urls import ZILLOW_URL
-from util import clean
-from util import get_response, get_headers
+from src.properties import ZillowPropertyHtml, ZillowPropertyJson
+from src.util import get_tor_client, read_files
+from src.urls import ZILLOW_URL
+from src.util import clean
+from src.util import get_response, get_headers
 
 CREDENTIALS = os.path.expanduser('~/.creds.json')
 

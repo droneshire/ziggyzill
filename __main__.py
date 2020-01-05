@@ -3,8 +3,8 @@ import os
 import re
 import time
 
-from util import EMAIL_REGEX
-from zillow_scraper import ZillowScraperCsv, ZillowScraperGsheets
+from src.util import EMAIL_REGEX
+from src.zillow_scraper import ZillowScraperCsv, ZillowScraperGsheets
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
