@@ -4,6 +4,7 @@ import rq
 
 import worker
 from src.zillow_scraper import ZillowScraperGsheets
+from src.zillow_scraper import scrape_zillow_zipcode
 
 app = flask.Flask(__name__)
 app.config.from_object(os.environ['APP_SETTINGS'])
