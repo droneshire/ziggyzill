@@ -2,12 +2,14 @@
 
 import datetime
 import gspread
+import gspread_formatting as gsf
 import json
 import os
 import random
 import re
 import time
-import unicodecsv as csv
+import unicodecsv
+
 from lxml import html
 from oauth2client.service_account import ServiceAccountCredentials
 from tqdm import tqdm
@@ -112,7 +114,7 @@ class ZillowHtmlDownloader(object):
             responses.append(response.text)
 
             parser = html.fromstring(response.text)
-            time.sleep(1.0 + random.random() * 10.0)
+            time.sleep(1.0 + random.random() * 1.0)
         return responses
 
 
@@ -233,6 +235,17 @@ class ZillowScraperGsheets(ZillowScraper):
             disclaimer_cells[i].value = line
         worksheet.update_cells(disclaimer_cells)
 
+        fmt = gsf.cellFormat(
+            backgroundColor=gsf.color(0.7, 0.77, 0.87),
+            textFormat=gsf.textFormat(
+                bold=True,
+                foregroundColor=gsf.color(0, 0, .54)),
+            horizontalAlignment='LEFT')
+        gsf.format_cell_ranges(worksheet, [('A1:E1', fmt),
+                                           ('A3:E3', fmt),
+                                           ('A4:E4', fmt),
+                                           ('A9:E9', fmt)])
+
         # data worksheet
         worksheet = sheet.add_worksheet(
             title=self.description,
@@ -256,11 +269,30 @@ class ZillowScraperGsheets(ZillowScraper):
         for i, val in enumerate(cell_values):
             cell_list[i].value = val
         worksheet.update_cells(cell_list)
+
+        fmt_title = gsf.cellFormat(
+            backgroundColor=gsf.color(0.7, 0.77, 0.87),
+            textFormat=gsf.textFormat(
+                bold=True,
+                foregroundColor=gsf.color(0, 0, .54)),
+            horizontalAlignment='LEFT')
+        fmt_fields = gsf.cellFormat(
+            backgroundColor=gsf.color(0.7, 0.77, 0.87),
+            textFormat=gsf.textFormat(
+                bold=True,
+                foregroundColor=gsf.color(0, 0, .54)),
+            horizontalAlignment='CENTER')
+        # hack since gspread_formatting doesn't seem to support
+        # full row notation (e.g. '1:2')
+        range_str = 'B2:{}2'.format(chr(ord('a') + cols).upper())
+        gsf.format_cell_ranges(worksheet, [('A1', fmt_title),
+                                           (range_str, fmt_fields)])
+
         print('Sharing with {}'.format(self.share_email))
         sheet.share(
             self.share_email,
             perm_type='user',
-            role='reader',
+            role='owner',
             notify=True,
             email_message='Here is your zipcode list from Engineered Cash Flow',
             with_link=False)
@@ -294,7 +326,7 @@ class ZillowScraperCsv(ZillowScraper):
         filename = os.path.join(self.outdir, name)
         print('Saving to {}'.format(filename))
         with open(filename, 'wb') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
+            writer = unicodecsv.DictWriter(csvfile, fieldnames=self.fieldnames)
             writer.writeheader()
             print('Saving {} properties'.format(len(self.properties_list)))
             for p in self.properties_list:

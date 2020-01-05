@@ -3,6 +3,7 @@ chardet==3.0.4
 Click==7.0
 Flask==1.1.1
 gspread==3.1.0
+gspread-formatting==0.0.7
 gunicorn==19.4.5
 httplib2==0.14.0
 idna==2.8
