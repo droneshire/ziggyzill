@@ -1,6 +1,7 @@
 from src.urls import ZILLOW_URL
 from src.util import clean
 
+
 class Property(object):
 
     def __init__(self):
@@ -25,15 +26,19 @@ class ZillowPropertyHtml(Property):
 
     def __init__(self, html_elements, json_elements):
         super(ZillowPropertyHtml, self).__init__()
-        raw_address = html_elements.xpath('.//h3[@class="list-card-addr"]//text()')
-        raw_price = html_elements.xpath('.//div[@class="list-card-price"]//text()')
-        raw_broker_name = html_elements.xpath('.//div[@class="list-card-truncate"]//text()')
+        raw_address = html_elements.xpath(
+            './/h3[@class="list-card-addr"]//text()')
+        raw_price = html_elements.xpath(
+            './/div[@class="list-card-price"]//text()')
+        raw_broker_name = html_elements.xpath(
+            './/div[@class="list-card-truncate"]//text()')
         if html_elements.xpath('.//span[@class="zsg-icon-for-sale"]'):
             self.is_forsale = True
-        maybe_days_on_zillow = html_elements.xpath('.//div[@class="list-card-top"]//div[@class="list-card-variable-text list-card-img-overlay"]//text()')[0]
+        maybe_days_on_zillow = html_elements.xpath(
+            './/div[@class="list-card-top"]//div[@class="list-card-variable-text list-card-img-overlay"]//text()')[0]
         if 'days on Zillow' in maybe_days_on_zillow:
             self.days_on_zillow = int(maybe_days_on_zillow.split()[0])
-        address_node = json_elements.get('address') 
+        address_node = json_elements.get('address')
 
         self.city = address_node.get('addressLocality')
         self.state = address_node.get('addressRegion')
@@ -45,6 +50,7 @@ class ZillowPropertyHtml(Property):
         self.broker = clean(raw_broker_name)
         self.title = json_elements.get('statusText')
         self.property_url = ZILLOW_URL + json_elements.get('url')
+
 
 class ZillowPropertyJson(Property):
 
@@ -60,7 +66,8 @@ class ZillowPropertyJson(Property):
         self.bedrooms = json_input.get('beds')
         self.bathrooms = json_input.get('baths')
         self.area = json_input.get('area')
-        self.info = '{} bds, {} ba ,{} sqft'.format(self.bedrooms, self.bathrooms, self.area)
+        self.info = '{} bds, {} ba ,{} sqft'.format(
+            self.bedrooms, self.bathrooms, self.area)
         self.broker = json_input.get('brokerName')
         self.property_url = json_input.get('detailUrl')
         self.title = json_input.get('statusText')

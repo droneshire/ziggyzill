@@ -1,6 +1,6 @@
 import os
 import redis
-import rq 
+import rq
 
 listen = ['high', 'default', 'low']
 
