@@ -4,6 +4,7 @@ import os
 import re
 import requests
 
+from decouple import config
 from torrequest import TorRequest
 
 TOR_CONF = '/tmp/.tor.conf'
@@ -29,7 +30,7 @@ def get_response(request, url, headers, response_path=None, verbose=False):
 
 
 def get_tor_client(ask_if_needed=False):
-    tpwd = os.getenv('TOR_PASSWORD')
+    tpwd = config('TOR_PASSWORD', '')
     if not tpwd:
         if os.path.isfile(TOR_CONF):
             with open(TOR_CONF) as infile:

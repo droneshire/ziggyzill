@@ -8,6 +8,7 @@ import re
 import time
 import unicodecsv
 
+from decouple import config
 from lxml import html
 from oauth2client.service_account import ServiceAccountCredentials
 from tqdm import tqdm
@@ -17,7 +18,10 @@ from src.urls import ZILLOW_URL
 from src.util import get_tor_client, read_files, clean, get_response, get_headers
 from src.util import EMAIL_REGEX
 
-CREDENTIALS = json.loads(os.getenv('GOOGLE_CREDENTIALS'))
+CREDENTIALS = config(
+    'GOOGLE_CREDENTIALS',
+    default=None,
+    cast=lambda x: json.loads(x))
 
 
 def scrape_zillow_zipcode(zipcode, email):
