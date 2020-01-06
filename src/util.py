@@ -2,6 +2,7 @@
 import getpass
 import os
 import re
+import requests
 
 from torrequest import TorRequest
 
@@ -10,9 +11,9 @@ TOR_CONF = '/tmp/.tor.conf'
 EMAIL_REGEX = re.compile('\S+@\S+')
 
 
-def get_response(tor, url, headers, response_path=None, verbose=False):
+def get_response(request, url, headers, response_path=None, verbose=False):
     for i in range(5):
-        response = tor.get(url, headers=headers)
+        response = request.get(url, headers=headers)
         if verbose:
             print('URL: {}'.format(url))
             print('Response:\n'.format(response.text))
@@ -40,9 +41,13 @@ def get_tor_client(ask_if_needed=False):
         else:
             raise Exception('No tor password available!')
     print('Connecting to tor...')
-    tr = TorRequest(password=tpwd)
-    tr.reset_identity()
-    print('Session established!')
+    try:
+        tr = TorRequest(password=tpwd)
+        tr.reset_identity()
+        print('Session established!')
+    except OSError:
+        print('Tor not available, using regular requests...')
+        tr = requests
     return tr
 
 
