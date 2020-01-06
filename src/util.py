@@ -38,7 +38,7 @@ def get_tor_client(ask_if_needed=False):
         tpwd = getpass.getpass(prompt='Tor password: ', stream=None)
         with open(TOR_CONF, 'w') as outfile:
             outfile.write(tpwd)
-    
+
     print('Connecting to tor...')
     try:
         tr = TorRequest(password=tpwd)

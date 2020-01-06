@@ -87,15 +87,27 @@ class ZillowHtmlDownloader(object):
         if not response:
             print("Failed to fetch the page.")
             return None
+        try:
+            responses = self.parse_zillow_response(response)
+        except BaseException:
+            print(url)
+            raise
+        return responses
 
+    def parse_zillow_response(self, response):
+        responses = [response.text]
         parser = html.fromstring(response.text)
         print('Reading root page results')
         result_count_str = parser.xpath(
             '//div/div/div[@class="search-subtitle"]/span[@class="result-count"]//text()')[0].split()[0]
         total_homes_results = int(result_count_str.replace(',', ''))
+
         PROPERTIES_PER_PAGE = 40
         # don't add 1 b/c we've already queried the first page
         pages_to_query = int(total_homes_results / PROPERTIES_PER_PAGE)
+        if pages_to_query <= 0:
+            return responses
+
         next_page = parser.xpath(
             '//li[@class="zsg-pagination-next"]/a/@href')[0]
         next_page_url = os.path.dirname(next_page.rstrip('/'))
@@ -106,7 +118,6 @@ class ZillowHtmlDownloader(object):
         random.shuffle(pages)
         print('Found {} results'.format(total_homes_results))
 
-        responses = [response.text]
         for page in tqdm(pages):
             url = os.path.join(next_page_prefix, '{}_p'.format(page))
             response = get_response(
