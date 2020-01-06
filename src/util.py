@@ -27,14 +27,18 @@ def get_response(tor, url, headers, response_path=None, verbose=False):
     return None
 
 
-def get_tor_client():
-    if os.path.isfile(TOR_CONF):
-        with open(TOR_CONF) as infile:
-            tpwd = infile.read().strip()
-    else:
-        tpwd = getpass.getpass(prompt='Tor password: ', stream=None)
-        with open(TOR_CONF, 'w') as outfile:
-            outfile.write(tpwd)
+def get_tor_client(ask_if_needed=False):
+    tpwd = os.getenv('TOR_PASSWORD')
+    if not tpwd:
+        if os.path.isfile(TOR_CONF):
+            with open(TOR_CONF) as infile:
+                tpwd = infile.read().strip()
+        elif ask_if_needed:
+            tpwd = getpass.getpass(prompt='Tor password: ', stream=None)
+            with open(TOR_CONF, 'w') as outfile:
+                outfile.write(tpwd)
+        else:
+            raise Exception('No tor password available!')
     print('Connecting to tor...')
     tr = TorRequest(password=tpwd)
     tr.reset_identity()
