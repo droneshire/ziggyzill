@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import datetime
 import gspread
 import gspread_formatting as gsf
@@ -19,15 +17,16 @@ from src.urls import ZILLOW_URL
 from src.util import get_tor_client, read_files, clean, get_response, get_headers
 from src.util import EMAIL_REGEX
 
-CREDENTIALS = os.path.expanduser('~/.creds.json')
+CREDENTIALS = json.loads(os.getenv('GOOGLE_CREDENTIALS'))
 
 
 def scrape_zillow_zipcode(zipcode, email):
     match = re.match(EMAIL_REGEX, email)
     if not match:
-        return
+        return False
     zsearch = ZillowScraperGsheets(zipcode, email)
     zsearch.scrape(filenames=None)
+    return True
 
 
 def maybe_get_xml_results(parser):
@@ -120,11 +119,6 @@ class ZillowHtmlDownloader(object):
 
 class ZillowScraper(object):
     """ Class for scraping Zillow search html """
-    GSHEETS_SCOPE = [
-        "https://spreadsheets.google.com/feeds",
-        'https://www.googleapis.com/auth/spreadsheets',
-        "https://www.googleapis.com/auth/drive.file",
-        "https://www.googleapis.com/auth/drive"]
 
     def __init__(self, description, zipcode, verbose=False):
         self.description = description
@@ -210,11 +204,17 @@ you take in reliance on our statements or recommendations.
 
 
 class ZillowScraperGsheets(ZillowScraper):
+    GSHEETS_SCOPE = [
+        'https://spreadsheets.google.com/feeds',
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive']
+
     def __init__(self, zip_code, share_email):
         super(ZillowScraperGsheets, self).__init__(description=zip_code,
                                                    zipcode=zip_code)
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
-            CREDENTIALS, self.GSHEETS_SCOPE)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            CREDENTIALS, scopes=self.GSHEETS_SCOPE)
         self.client = gspread.authorize(creds)
         self.share_email = share_email
         self.zip_code = zip_code
