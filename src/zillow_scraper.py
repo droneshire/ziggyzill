@@ -179,7 +179,8 @@ class ZillowScraper(object):
             results_pages.extend(read_files(filenames))
         else:
             tr = get_tor_client()
-            zquery = ZillowHtmlDownloader(tr, self.zipcode, verbose=self.verbose)
+            zquery = ZillowHtmlDownloader(
+                tr, self.zipcode, verbose=self.verbose)
             results_pages.extend(zquery.query_zillow())
             if not results_pages:
                 assert filenames, 'Must specify a downloaded html file since we cannot query zillow!'
