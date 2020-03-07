@@ -33,7 +33,7 @@ def scrape_zillow_zipcode(zipcode, email):
     return True
 
 
-def maybe_get_xml_results(parser):
+def maybe_get_xml_results(parser, verbose=False):
     xml_results = parser.xpath(
         '//article[@class="list-card list-card-short list-card_not-saved"]')
     string_results = parser.xpath(
@@ -51,7 +51,7 @@ def maybe_get_xml_results(parser):
     return properties
 
 
-def maybe_get_json_results(parser):
+def maybe_get_json_results(parser, verbose=False):
     raw_json = parser.xpath(
         '//script[@data-zrr-shared-data-key="mobileSearchPageStore"]//text()')
     cleaned_data = clean(raw_json).replace('<!--', "").replace("-->", "")
@@ -83,6 +83,7 @@ class ZillowHtmlDownloader(object):
             self.tor,
             url,
             get_headers(),
+            response_path=None,
             verbose=self.verbose)
         if not response:
             print("Failed to fetch the page.")
@@ -126,8 +127,6 @@ class ZillowHtmlDownloader(object):
                 print("Failed to fetch the next page.")
                 continue
             responses.append(response.text)
-
-            parser = html.fromstring(response.text)
             time.sleep(1.0 + random.random() * 10.0)
         return responses
 
@@ -151,13 +150,15 @@ class ZillowScraper(object):
                                   'broker',
                                   'property_url'])
         self.verbose = verbose
+        if self.verbose:
+            print('Verbose printing enabled!')
 
     def parse_properties(self, raw_html):
         parser = html.fromstring(raw_html)
         # try json first as it generally has more consistent info
-        properties = maybe_get_json_results(parser)
+        properties = maybe_get_json_results(parser, self.verbose)
         # try parsing the xml directly afterwards
-        properties.extend(maybe_get_xml_results(parser))
+        properties.extend(maybe_get_xml_results(parser, self.verbose))
         for prop in properties:
             if prop.address in self.addresses:
                 continue
@@ -178,7 +179,7 @@ class ZillowScraper(object):
             results_pages.extend(read_files(filenames))
         else:
             tr = get_tor_client()
-            zquery = ZillowHtmlDownloader(tr, self.zipcode)
+            zquery = ZillowHtmlDownloader(tr, self.zipcode, verbose=self.verbose)
             results_pages.extend(zquery.query_zillow())
             if not results_pages:
                 assert filenames, 'Must specify a downloaded html file since we cannot query zillow!'
@@ -225,9 +226,10 @@ class ZillowScraperGsheets(ZillowScraper):
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/drive']
 
-    def __init__(self, zip_code, share_email):
+    def __init__(self, zip_code, share_email, verbose=False):
         super(ZillowScraperGsheets, self).__init__(description=zip_code,
-                                                   zipcode=zip_code)
+                                                   zipcode=zip_code,
+                                                   verbose=verbose)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
             CREDENTIALS, scopes=self.GSHEETS_SCOPE)
         self.client = gspread.authorize(creds)
@@ -319,12 +321,13 @@ class ZillowScraperGsheets(ZillowScraper):
 
 class ZillowScraperCsv(ZillowScraper):
 
-    def __init__(self, zip_code, outdir):
+    def __init__(self, zip_code, outdir, verbose=False):
         super(
             ZillowScraperCsv,
             self).__init__(
             description=zip_code,
-            zipcode=zip_code)
+            zipcode=zip_code,
+            verbose=verbose)
         self.outdir = outdir
 
     def write_data_to_csv(self):

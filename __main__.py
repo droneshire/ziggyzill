@@ -11,6 +11,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     # required inputs
     parser.add_argument('zipcode', help='zip code to search')
+    parser.add_argument('--verbose', action='store_true', help='verbose')
 
     # optional inputs
     parser.add_argument(
@@ -39,10 +40,10 @@ if __name__ == "__main__":
     assert len(args.zipcode) == 5, 'invalid zip code argument'
 
     if args.save_option == 'local':
-        zsearch = ZillowScraperCsv(args.zipcode, args.outdir)
+        zsearch = ZillowScraperCsv(args.zipcode, args.outdir, args.verbose)
     elif args.save_option == 'web':
         match = re.match(EMAIL_REGEX, args.email)
         if not match:
             raise Exception('Invalid email type')
-        zsearch = ZillowScraperGsheets(args.zipcode, args.email)
+        zsearch = ZillowScraperGsheets(args.zipcode, args.email, args.verbose)
     zsearch.scrape(args.filenames)

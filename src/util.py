@@ -17,7 +17,7 @@ def get_response(request, url, headers, response_path=None, verbose=False):
         response = request.get(url, headers=headers)
         if verbose:
             print('URL: {}'.format(url))
-            print('Response:\n'.format(response.text))
+            print('Response:\n{}'.format(response.text))
         if response_path:
             save_to_file(response_path, response.text)
         if 'Please verify you\'re a human to continue.' in response.text:

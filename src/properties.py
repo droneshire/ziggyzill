@@ -56,7 +56,7 @@ class ZillowPropertyJson(Property):
 
     def __init__(self, json_input):
         super(ZillowPropertyJson, self).__init__()
-        self.address = json_input.get('addressWithZip')
+        self.address = json_input.get('address')
         self.property_info = json_input.get('hdpData', {}).get('homeInfo')
         self.city = self.property_info.get('city')
         self.state = self.property_info.get('state')
