@@ -28,7 +28,7 @@ def scrape_zillow_zipcode(zip_code, email):
     match = re.match(EMAIL_REGEX, email)
     if not match:
         return False
-    zsearch = ZillowScraperGsheets(zip_code, email)
+    zsearch = ZillowScraperGsheets([zip_code], email)
     zsearch.scrape()
     return True
 
@@ -140,7 +140,6 @@ class ZillowScraper(object):
     def __init__(self, zip_codes, verbose=False):
         self.zip_code = ''
         self.zip_codes = zip_codes
-        self.properties_list = []
         self.addresses = []
         self.fieldnames = sorted(['title',
                                   'address',
@@ -162,37 +161,45 @@ class ZillowScraper(object):
         properties = maybe_get_json_results(parser, self.verbose)
         # try parsing the xml directly afterwards
         properties.extend(maybe_get_xml_results(parser, self.verbose))
+        properties_list = []
+        parsed_addresses = []
         for prop in properties:
-            if prop.address in self.addresses:
+            if prop.address in parsed_addresses:
                 continue
             if self.verbose:
                 print('Found {}'.format(prop.address))
-            self.addresses.append(prop.address)
-            self.properties_list.append(prop)
-        return self.properties_list
+            parsed_addresses.append(prop.address)
+            properties_list.append(prop)
+        return properties_list
 
-    def write_data_to_csv(self):
+    def write_csv(self):
         """ Virtual method, implement in base class """
         raise NotImplementedError
 
-    def parse_and_store(self, results_pages):
-        for i, result in enumerate(results_pages):
-            try:
-                print('Parsing page {}'.format(i + 1))
-                self.parse_properties(result)
-            except BaseException:
-                print(result)
-                raise
-        self.write_data_to_csv()
+    def add_data_to_csv(self, properties):
+        """ Virtual method, implement in base class
+        properties: list of property data for a zip code
+        """
+        raise NotImplementedError
 
     def scrape(self):
-        results_pages = []
         tr = get_tor_client()
         for zip_code in self.zip_codes:
+            results_pages = []
             self.zip_code = zip_code
             zquery = ZillowHtmlDownloader(tr, zip_code, verbose=self.verbose)
             results_pages.extend(zquery.query_zillow())
-            self.parse_and_store(results_pages)
+
+            properties_list = []
+            for i, result in enumerate(results_pages):
+                try:
+                    print('Parsing page {}'.format(i + 1))
+                    properties_list.extend(self.parse_properties(result))
+                except BaseException:
+                    print(result)
+                    raise
+            self.add_data_to_csv(properties_list)
+        self.write_csv()
 
 
 INFO = """\
@@ -233,6 +240,7 @@ class ZillowScraperGsheets(ZillowScraper):
             CREDENTIALS, scopes=self.GSHEETS_SCOPE)
         self.client = gspread.authorize(creds)
         self.share_email = share_email
+        self.sheet = None
 
     def create_disclaimer_worksheet(self, sheet):
         worksheet = sheet.get_worksheet(0)
@@ -254,7 +262,7 @@ class ZillowScraperGsheets(ZillowScraper):
                                            ('A4:E4', fmt),
                                            ('A9:E9', fmt)])
 
-    def create_data_worksheet(self, sheet, rows, cols):
+    def create_data_worksheet(self, sheet, rows, cols, properties_list):
         worksheet = sheet.add_worksheet(
             title=self.zip_code,
             rows=str(rows),
@@ -266,7 +274,7 @@ class ZillowScraperGsheets(ZillowScraper):
         cell_values.extend([''] * (cols - 1))
         cell_values.extend(self.fieldnames)
 
-        for p in tqdm(self.properties_list):
+        for p in tqdm(properties_list):
             data = []
             for field in self.fieldnames:
                 data.append(p.__dict__[field])
@@ -297,24 +305,27 @@ class ZillowScraperGsheets(ZillowScraper):
             ('A1:{}1'.format(col_label), fmt_title),
             ('A2:{}2'.format(col_label), fmt_fields)])
 
-    def write_data_to_csv(self):
-        sheetname = 'zillow_data_{}_{}'.format(
-            datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), self.zip_code)
-        sheet = self.client.create(sheetname)
-        rows = len(self.properties_list) + 2  # title + fieldnames
+    def add_data_to_csv(self, properties_list):
+        if self.sheet is None:
+            sheetname = 'zillow_data_{}_{}'.format(
+                datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), '_'.join(self.zip_codes))
+            self.sheet = self.client.create(sheetname)
+            self.create_disclaimer_worksheet(self.sheet)
+
+        rows = len(properties_list) + 2  # title + fieldnames
         cols = len(self.fieldnames)
+        self.create_data_worksheet(self.sheet, rows, cols, properties_list)
 
-        self.create_disclaimer_worksheet(sheet)
-        self.create_data_worksheet(sheet, rows, cols)
-
+    def write_csv(self):
         print('Sharing with {}'.format(self.share_email))
-        sheet.share(
+        self.sheet.share(
             self.share_email,
             perm_type='user',
             role='owner',
             notify=True,
             email_message='Here is your zip_code list from Engineered Cash Flow',
             with_link=False)
+        self.sheet = None
 
 
 class ZillowScraperCsv(ZillowScraper):
@@ -323,8 +334,13 @@ class ZillowScraperCsv(ZillowScraper):
         super(ZillowScraperCsv, self).__init__(zip_codes=zip_codes,
                                                verbose=verbose)
         self.outdir = outdir
+        self.properties_list = []
 
-    def write_data_to_csv(self):
+    def add_data_to_csv(self, properties_list):
+        # for this option, we save all zips in the same csv
+        self.properties_list.extend(properties_list)
+
+    def write_csv(self):
         fieldnames = [
             'title',
             'address',
