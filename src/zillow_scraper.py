@@ -24,12 +24,12 @@ CREDENTIALS = config(
     cast=lambda x: json.loads(x))
 
 
-def scrape_zillow_zipcode(zipcode, email):
+def scrape_zillow_zipcode(zip_code, email):
     match = re.match(EMAIL_REGEX, email)
     if not match:
         return False
-    zsearch = ZillowScraperGsheets(zipcode, email)
-    zsearch.scrape(filenames=None)
+    zsearch = ZillowScraperGsheets(zip_code, email)
+    zsearch.scrape()
     return True
 
 
@@ -117,7 +117,10 @@ class ZillowHtmlDownloader(object):
         # create some randomness in page browsing
         pages = [page for page in range(2, 2 + pages_to_query)]
         random.shuffle(pages)
-        print('Found {} results'.format(total_homes_results))
+        print(
+            'Found {} results for {}'.format(
+                total_homes_results,
+                self.zip_code))
 
         for page in tqdm(pages):
             url = os.path.join(next_page_prefix, '{}_p'.format(page))
@@ -127,16 +130,16 @@ class ZillowHtmlDownloader(object):
                 print("Failed to fetch the next page.")
                 continue
             responses.append(response.text)
-            time.sleep(1.0 + random.random() * 10.0)
+            time.sleep(random.random() * 4.0)
         return responses
 
 
 class ZillowScraper(object):
     """ Class for scraping Zillow search html """
 
-    def __init__(self, description, zipcode, verbose=False):
-        self.description = description
-        self.zipcode = zipcode
+    def __init__(self, zip_codes, verbose=False):
+        self.zip_code = ''
+        self.zip_codes = zip_codes
         self.properties_list = []
         self.addresses = []
         self.fieldnames = sorted(['title',
@@ -172,20 +175,7 @@ class ZillowScraper(object):
         """ Virtual method, implement in base class """
         raise NotImplementedError
 
-    def scrape(self, filenames=None):
-        results_pages = []
-        if filenames:
-            print('Reading:\n{}'.format('\t\n'.join(filenames)))
-            results_pages.extend(read_files(filenames))
-        else:
-            tr = get_tor_client()
-            zquery = ZillowHtmlDownloader(
-                tr, self.zipcode, verbose=self.verbose)
-            results_pages.extend(zquery.query_zillow())
-            if not results_pages:
-                assert filenames, 'Must specify a downloaded html file since we cannot query zillow!'
-                results_pages.extend(read_files(filenames))
-
+    def parse_and_store(self, results_pages):
         for i, result in enumerate(results_pages):
             try:
                 print('Parsing page {}'.format(i + 1))
@@ -194,6 +184,15 @@ class ZillowScraper(object):
                 print(result)
                 raise
         self.write_data_to_csv()
+
+    def scrape(self):
+        results_pages = []
+        tr = get_tor_client()
+        for zip_code in self.zip_codes:
+            self.zip_code = zip_code
+            zquery = ZillowHtmlDownloader(tr, zip_code, verbose=self.verbose)
+            results_pages.extend(zquery.query_zillow())
+            self.parse_and_store(results_pages)
 
 
 INFO = """\
@@ -227,15 +226,13 @@ class ZillowScraperGsheets(ZillowScraper):
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/drive']
 
-    def __init__(self, zip_code, share_email, verbose=False):
-        super(ZillowScraperGsheets, self).__init__(description=zip_code,
-                                                   zipcode=zip_code,
+    def __init__(self, zip_codes, share_email, verbose=False):
+        super(ZillowScraperGsheets, self).__init__(zip_codes=zip_codes,
                                                    verbose=verbose)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
             CREDENTIALS, scopes=self.GSHEETS_SCOPE)
         self.client = gspread.authorize(creds)
         self.share_email = share_email
-        self.zip_code = zip_code
 
     def create_disclaimer_worksheet(self, sheet):
         worksheet = sheet.get_worksheet(0)
@@ -259,7 +256,7 @@ class ZillowScraperGsheets(ZillowScraper):
 
     def create_data_worksheet(self, sheet, rows, cols):
         worksheet = sheet.add_worksheet(
-            title=self.description,
+            title=self.zip_code,
             rows=str(rows),
             cols=str(cols))
         worksheet.clear()
@@ -302,7 +299,7 @@ class ZillowScraperGsheets(ZillowScraper):
 
     def write_data_to_csv(self):
         sheetname = 'zillow_data_{}_{}'.format(
-            datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), self.description)
+            datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), self.zip_code)
         sheet = self.client.create(sheetname)
         rows = len(self.properties_list) + 2  # title + fieldnames
         cols = len(self.fieldnames)
@@ -316,19 +313,15 @@ class ZillowScraperGsheets(ZillowScraper):
             perm_type='user',
             role='owner',
             notify=True,
-            email_message='Here is your zipcode list from Engineered Cash Flow',
+            email_message='Here is your zip_code list from Engineered Cash Flow',
             with_link=False)
 
 
 class ZillowScraperCsv(ZillowScraper):
 
-    def __init__(self, zip_code, outdir, verbose=False):
-        super(
-            ZillowScraperCsv,
-            self).__init__(
-            description=zip_code,
-            zipcode=zip_code,
-            verbose=verbose)
+    def __init__(self, zip_codes, outdir, verbose=False):
+        super(ZillowScraperCsv, self).__init__(zip_codes=zip_codes,
+                                               verbose=verbose)
         self.outdir = outdir
 
     def write_data_to_csv(self):
@@ -344,8 +337,7 @@ class ZillowScraperCsv(ZillowScraper):
             'broker',
             'property_url']
         name = 'zillow_data_{}_{}.csv'.format(
-            datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'),
-            self.description)
+            datetime.datetime.now().strftime('%m_%d_%Y__%H_%M_%S'), self.zip_code)
         filename = os.path.join(self.outdir, name)
         print('Saving to {}'.format(filename))
         with open(filename, 'wb') as csvfile:
