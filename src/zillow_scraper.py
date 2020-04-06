@@ -100,8 +100,11 @@ class ZillowHtmlDownloader(object):
         parser = html.fromstring(response.text)
         print('Reading root page results')
         result_count_str = parser.xpath(
-            '//div/div/div[@class="search-subtitle"]/span[@class="result-count"]//text()')[0].split()[0]
+            '//div/div/div[@class="search-subtitle"]/span[@class="result-count"]//text()')
+        result_count_str = result_count_str[0].split()[0]
         total_homes_results = int(result_count_str.replace(',', ''))
+
+        print('Found {} results for {}'.format(total_homes_results, self.zip_code))
 
         PROPERTIES_PER_PAGE = 40
         # don't add 1 b/c we've already queried the first page
@@ -109,25 +112,21 @@ class ZillowHtmlDownloader(object):
         if pages_to_query <= 0:
             return responses
 
-        next_page = parser.xpath(
-            '//li[@class="zsg-pagination-next"]/a/@href')[0]
-        next_page_url = os.path.dirname(next_page.rstrip('/'))
-        next_page_prefix = ZILLOW_URL + next_page_url
+        with open('/tmp/output.txt', 'w') as f:
+            f.write(response.text)
+        next_page = parser.xpath('//div[@id="grid-search-results"]/nav[@role="navigation"][@aria-label="Pagination"]/ul/li//a/@href')[0]
+        next_page_prefix = ZILLOW_URL + next_page
 
         # create some randomness in page browsing
         pages = [page for page in range(2, 2 + pages_to_query)]
         random.shuffle(pages)
-        print(
-            'Found {} results for {}'.format(
-                total_homes_results,
-                self.zip_code))
 
         for page in tqdm(pages):
             url = os.path.join(next_page_prefix, '{}_p'.format(page))
             response = get_response(
                 self.tor, url, get_headers(), verbose=self.verbose)
             if not response:
-                print("Failed to fetch the next page.")
+                print("Failed to fetch the next page: {}".format(url))
                 continue
             responses.append(response.text)
             time.sleep(random.random() * 4.0)
@@ -321,7 +320,7 @@ class ZillowScraperGsheets(ZillowScraper):
         self.sheet.share(
             self.share_email,
             perm_type='user',
-            role='owner',
+            role='owner' if self.share_email.endswith('@gmail.com') else 'writer',
             notify=True,
             email_message='Here is your zip_code list from Engineered Cash Flow',
             with_link=False)
