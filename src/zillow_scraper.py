@@ -56,7 +56,8 @@ def maybe_get_json_results(parser, verbose=False):
         '//script[@data-zrr-shared-data-key="mobileSearchPageStore"]//text()')
     cleaned_data = clean(raw_json).replace('<!--', "").replace("-->", "")
     json_data = json.loads(cleaned_data)
-    search_results = json_data.get('searchResults').get('listResults', [])
+    search_results = json_data.get('cat1').get(
+        'searchResults').get('listResults', [])
     properties = []
     for result in search_results:
         properties.append(ZillowPropertyJson(result))
@@ -100,7 +101,7 @@ class ZillowHtmlDownloader(object):
         parser = html.fromstring(response.text)
         print('Reading root page results')
         result_count_str = parser.xpath(
-            '//div/div/div[@class="search-subtitle"]/span[@class="result-count"]//text()')
+            "//span[@class=\"result-count\"]/text()")
         result_count_str = result_count_str[0].split()[0]
         total_homes_results = int(result_count_str.replace(',', ''))
 
@@ -112,9 +113,12 @@ class ZillowHtmlDownloader(object):
         if pages_to_query <= 0:
             return responses
 
-        with open('/tmp/output.txt', 'w') as f:
-            f.write(response.text)
-        next_page = parser.xpath('//div[@id="grid-search-results"]/nav[@role="navigation"][@aria-label="Pagination"]/ul/li//a/@href')[0]
+        if self.verbose:
+            with open('/tmp/output.txt', 'w') as f:
+                f.write(response.text)
+
+        next_page = parser.xpath(
+            '//nav[@role="navigation"][@aria-label="Pagination"]/ul/li//a/@href')[0]
         next_page_prefix = ZILLOW_URL + next_page
 
         # create some randomness in page browsing
@@ -129,7 +133,7 @@ class ZillowHtmlDownloader(object):
                 print("Failed to fetch the next page: {}".format(url))
                 continue
             responses.append(response.text)
-            time.sleep(random.random() * 4.0)
+            time.sleep(2.0 + random.random() * 8.0))
         return responses
 
 
@@ -320,7 +324,8 @@ class ZillowScraperGsheets(ZillowScraper):
         self.sheet.share(
             self.share_email,
             perm_type='user',
-            role='owner' if self.share_email.endswith('@gmail.com') else 'writer',
+            role='owner' if self.share_email.endswith(
+                '@gmail.com') else 'writer',
             notify=True,
             email_message='Here is your zip_code list from Engineered Cash Flow',
             with_link=False)
