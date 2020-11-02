@@ -133,7 +133,7 @@ class ZillowHtmlDownloader(object):
                 print("Failed to fetch the next page: {}".format(url))
                 continue
             responses.append(response.text)
-            time.sleep(2.0 + random.random() * 8.0))
+            time.sleep(2.0 + random.random() * 8.0)
         return responses
 
 
