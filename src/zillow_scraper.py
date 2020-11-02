@@ -105,7 +105,10 @@ class ZillowHtmlDownloader(object):
         result_count_str = result_count_str[0].split()[0]
         total_homes_results = int(result_count_str.replace(',', ''))
 
-        print('Found {} results for {}'.format(total_homes_results, self.zip_code))
+        print(
+            'Found {} results for {}'.format(
+                total_homes_results,
+                self.zip_code))
 
         PROPERTIES_PER_PAGE = 40
         # don't add 1 b/c we've already queried the first page
