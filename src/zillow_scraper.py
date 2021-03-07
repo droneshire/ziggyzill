@@ -101,9 +101,10 @@ class ZillowHtmlDownloader(object):
         parser = html.fromstring(response.text)
         print('Reading root page results')
         result_count_str = parser.xpath(
-            "//span[@class=\"result-count\"]/text()")
-        result_count_str = result_count_str[0].split()[0]
-        total_homes_results = int(result_count_str.replace(',', ''))
+            "//div[@class=\"total-text\"]/text()")
+        total_homes_results = 0
+        for results in result_count_str:
+            total_homes_results += int(results.strip())
 
         print(
             'Found {} results for {}'.format(
