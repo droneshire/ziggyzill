@@ -23,7 +23,7 @@ redis==3.3.11
 requests==2.22.0
 rq==1.2.0
 rq-dashboard==0.6.1
-rsa==4.0
+rsa==4.1
 six==1.13.0
 stem==1.7.1
 torrequest==0.1.0
